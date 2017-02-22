@@ -373,7 +373,6 @@ static int fuse_nfs_getattr(const char *path, struct stat *stbuf,
         return 0;
     }
 
-    return -ENOENT;
 }
 
 
@@ -583,6 +582,11 @@ static int fuse_nfs_fsync(const char *path, int isdatasync,
 
 }
 
+static int fuse_nfs_flush(const char *path, struct fuse_file_info *fi)
+{
+    return 0;
+}
+
 
 static struct fuse_operations nfs_oper = {
         .getattr       = fuse_nfs_getattr,
@@ -595,6 +599,7 @@ static struct fuse_operations nfs_oper = {
         .readdir    = fuse_nfs_readdir,
         .rmdir        = fuse_nfs_rmdir,
         .write        = fuse_nfs_write,
+        .flush        = fuse_nfs_flush,
 };
 
 int main(int argc, char *argv[]) {
