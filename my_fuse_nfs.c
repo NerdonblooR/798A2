@@ -373,7 +373,7 @@ static int fuse_nfs_getattr(const char *path, struct stat *stbuf,
     }else{
         stbuf->st_mode = S_IFREG | 0777;
         stbuf->st_nlink = 1;
-        stbuf->st_size = 0;
+        stbuf->st_size = 6190;
         return 0;
     }
 
