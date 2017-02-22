@@ -345,7 +345,7 @@ int nfs_read(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char *
 
     char *data = get_read_response(sockfd, nfsfh, &total_byte);
 
-    printf("HERE3\n");
+    printf("HERE3: %d\n", total_byte);
 
     memcpy(buf, data, total_byte);
 
@@ -551,7 +551,7 @@ static int fuse_nfs_read(const char *path, char *buf, size_t size,
     file_handler *nfsfh = (file_handler *) fi->fh;
     int ret = nfs_read(sockfd, nfsfh, offset, size, buf);
 
-    printf("buffer: %s\n", buf);
+    printf("buffer %d: %s\n", ret, buf);
     return ret;
 }
 
