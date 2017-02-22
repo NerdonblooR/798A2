@@ -172,7 +172,7 @@ char *get_read_response(int sockfd, file_handler *fh, int *total_bytes) {
     fh->wc = deserialize_str(buffer, &offset);
     if (response_code == 0) {
         printf("WOW2\n");
-        deserialize_int(&total_bytes, buffer, &offset);
+        deserialize_int(total_bytes, buffer, &offset);
         data_buffer = malloc(total_bytes);
         int read_bytes = n - offset;
         memcpy(data_buffer, buffer + offset, read_bytes);
