@@ -1,6 +1,5 @@
 #define FUSE_USE_VERSION 30
-#define BUFFER_SIZE 4096
-#define SERV_PORT 3000
+#define SERV_PORT 9876
 
 #include <config.h>
 #include <fuse.h>
@@ -25,13 +24,13 @@ typedef struct nfs_context {
 
 int sockfd;
 
-static int nfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+static int fuse_nfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                        off_t offset, struct fuse_file_info *fi) {
     strcpy(buf, "DUMMY DIR");
     return 0;
 }
 
-static int nfs_open(const char *path, struct fuse_file_info *fi) {
+static int fuse_nfs_open(const char *path, struct fuse_file_info *fi) {
     int ret = 0;
     file_handler *nfsfh;
 
@@ -46,7 +45,7 @@ static int nfs_open(const char *path, struct fuse_file_info *fi) {
 }
 
 
-static int nfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
+static int fuse_nfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
     int ret = 0;
     file_handler *nfsfh;
 
@@ -60,7 +59,7 @@ static int nfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) 
     return ret;
 }
 
-static int nfs_read(const char *path, char *buf, size_t size,
+static int fuse_nfs_read(const char *path, char *buf, size_t size,
                     off_t offset, struct fuse_file_info *fi) {
     file_handler *nfsfh = (file_handler *) fi->fh;
 
@@ -70,7 +69,7 @@ static int nfs_read(const char *path, char *buf, size_t size,
 }
 
 
-static int nfs_write(const char *path, const char *buf, size_t size,
+static int fuse_nfs_write(const char *path, const char *buf, size_t size,
                      off_t offset, struct fuse_file_info *fi) {
     file_handler *nfsfh = (file_handler *) fi->fh;
 
@@ -80,7 +79,7 @@ static int nfs_write(const char *path, const char *buf, size_t size,
 }
 
 
-static int nfs_mkdir(const char *path, mode_t mode) {
+static int fuse_nfs_mkdir(const char *path, mode_t mode) {
     int ret = 0;
     ret = nfs_mkdir(sockfd, path);
     return ret;
@@ -92,7 +91,7 @@ static int nfs_rmdir(const char *path) {
 }
 
 
-static int nfs_fsync(const char *path, int isdatasync,
+static int fuse_nfs_fsync(const char *path, int isdatasync,
                      struct fuse_file_info *fi) {
     file_handler *nfsfh = (file_handler *) fi->fh;
 
@@ -113,12 +112,6 @@ static struct fuse_operations nfs_oper = {
 };
 
 int main(int argc, char *argv[]) {
-
-    if (argc < 2) {
-        printf("No server ip specified\n");
-        exit(1);
-    }
-
     struct sockaddr_in servaddr;
 
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -129,7 +122,7 @@ int main(int argc, char *argv[]) {
     //Creation of the socket
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr(argv[1]);
+    servaddr.sin_addr.s_addr = inet_addr(argv[2]);
     servaddr.sin_port = htons(SERV_PORT); //convert to big-endian order
 
     //Connection of the client to the socket
