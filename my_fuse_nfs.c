@@ -347,7 +347,7 @@ int nfs_read(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char *
 
     printf("HERE3\n");
 
-    memcpy(buf + offset, data, total_byte);
+    memcpy(buf, data, total_byte);
 
     free(data);
 
