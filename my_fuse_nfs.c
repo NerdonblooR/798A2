@@ -361,7 +361,19 @@ static int fuse_nfs_getattr(const char *path, struct stat *stbuf,
                        struct fuse_file_info *fi)
 {
 
-    return 0;
+    memset(stbuf, 0, sizeof(struct stat));
+    if (strcmp(path, "/") == 0) {
+        stbuf->st_mode = S_IFDIR | 0755;
+        stbuf->st_nlink = 2;
+        return 0;
+    }else{
+        stbuf->st_mode = S_IFREG | 0777;
+        stbuf->st_nlink = 1;
+        stbuf->st_size = 0;
+        return 0;
+    }
+
+    return -ENOENT;
 }
 
 
