@@ -194,6 +194,8 @@ char *get_read_response(int sockfd, file_handler *fh, int *total_bytes) {
 
     }
 
+    read_bytes = recv(sockfd, buffer, 1, 0); // read final newline
+
     return data_buffer;
 }
 
