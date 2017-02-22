@@ -357,6 +357,14 @@ int nfs_read(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char *
 }
 
 
+static int fuse_nfs_getattr(const char *path, struct stat *stbuf,
+                       struct fuse_file_info *fi)
+{
+
+    return 0;
+}
+
+
 int nfs_write(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char *buf) {
     int cid = 2;
     printf("===========start write=========\n");
@@ -522,9 +530,7 @@ static int fuse_nfs_read(const char *path, char *buf, size_t size,
                          off_t offset, struct fuse_file_info *fi) {
     file_handler *nfsfh = (file_handler *) fi->fh;
 
-
     return nfs_read(sockfd, nfsfh, offset, size, buf);
-
 }
 
 
@@ -560,6 +566,7 @@ static int fuse_nfs_fsync(const char *path, int isdatasync,
 
 
 static struct fuse_operations nfs_oper = {
+        .getattr       = fuse_nfs_getattr,
         .create        = fuse_nfs_create,
         .fsync        = fuse_nfs_fsync,
         .mkdir        = fuse_nfs_mkdir,
