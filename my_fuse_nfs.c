@@ -173,11 +173,11 @@ char *get_read_response(int sockfd, file_handler *fh, int *total_bytes) {
     if (response_code == 0) {
         printf("WOW2\n");
         deserialize_int(total_bytes, buffer, &offset);
-        data_buffer = malloc(total_bytes);
+        data_buffer = malloc(*total_bytes);
         int read_bytes = n - offset;
         memcpy(data_buffer, buffer + offset, read_bytes);
         printf("WOW3\n");
-        int rest_bytes = total_bytes - read_bytes;
+        int rest_bytes = *total_bytes - read_bytes;
         offset = read_bytes;
         printf("read: %d\n", read_bytes);
         printf("rest: %d\n", rest_bytes);
