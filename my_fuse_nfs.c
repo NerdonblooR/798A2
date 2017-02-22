@@ -517,7 +517,7 @@ static int fuse_nfs_create(const char *path, mode_t mode, struct fuse_file_info 
     int ret = 0;
     file_handler *nfsfh;
 
-    ret = nfs_create(sockfd, path, &fh);
+    ret = nfs_create(sockfd, path, &nfsfh);
     if (ret < 0) {
         return ret;
     }
@@ -553,9 +553,9 @@ static int fuse_nfs_mkdir(const char *path, mode_t mode) {
     return ret;
 }
 
-static int nfs_rmdir(const char *path) {
+static int fuse_nfs_rmdir(const char *path) {
 
-    nfs_rmdir(sockfd, path);
+    return nfs_rmdir(sockfd, path);
 }
 
 
