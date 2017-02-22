@@ -347,7 +347,7 @@ int nfs_read(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char *
 
     printf("HERE3\n");
 
-    strcpy(buf, data);
+    memcpy(buf + offset, data, total_byte);
 
     free(data);
 
@@ -549,16 +549,14 @@ static int fuse_nfs_create(const char *path, mode_t mode, struct fuse_file_info 
 static int fuse_nfs_read(const char *path, char *buf, size_t size,
                          off_t offset, struct fuse_file_info *fi) {
     file_handler *nfsfh = (file_handler *) fi->fh;
-
-    return nfs_read(sockfd, nfsfh, offset, size, buf);
+    int ret = nfs_read(sockfd, nfsfh, offset, size, buf);
+    return ret;
 }
 
 
 static int fuse_nfs_write(const char *path, const char *buf, size_t size,
                           off_t offset, struct fuse_file_info *fi) {
     file_handler *nfsfh = (file_handler *) fi->fh;
-
-
     return nfs_write(sockfd, nfsfh, offset, size, buf);
 
 }
