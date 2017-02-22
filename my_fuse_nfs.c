@@ -155,7 +155,7 @@ void *get_readdir_response(int sockfd, int *num_dir) {
 }
 
 
-char *get_read_response(int sockfd, file_handler *fh) {
+char *get_read_response(int sockfd, file_handler *fh, int *total_bytes) {
     char buffer[BUFFER_SIZE];
     char *data_buffer;
     size_t n = recv(sockfd, buffer, BUFFER_SIZE, 0); //initial read
@@ -172,7 +172,6 @@ char *get_read_response(int sockfd, file_handler *fh) {
     fh->wc = deserialize_str(buffer, &offset);
     if (response_code == 0) {
         printf("WOW2\n");
-        int total_bytes;
         deserialize_int(&total_bytes, buffer, &offset);
         data_buffer = malloc(total_bytes);
         int read_bytes = n - offset;
@@ -342,7 +341,9 @@ int nfs_read(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char *
 
     printf("HERE2\n");
 
-    char *data = get_read_response(sockfd, nfsfh);
+    int total_byte;
+
+    char *data = get_read_response(sockfd, nfsfh, &total_byte);
 
     printf("HERE3\n");
 
@@ -353,7 +354,8 @@ int nfs_read(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char *
     printf("data: %s\n", buf);
 
     free(arg_buffer);
-    return 0;
+
+    return total_byte;
 }
 
 
