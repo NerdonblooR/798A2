@@ -365,6 +365,13 @@ static int fuse_nfs_getattr(const char *path, struct stat *stbuf,
 }
 
 
+static int fuse_nfs_access(const char *path, int mask)
+{
+
+    return 0;
+}
+
+
 int nfs_write(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char *buf) {
     int cid = 2;
     printf("===========start write=========\n");
@@ -567,6 +574,7 @@ static int fuse_nfs_fsync(const char *path, int isdatasync,
 
 static struct fuse_operations nfs_oper = {
         .getattr       = fuse_nfs_getattr,
+        .access		= fuse_nfs_access,
         .create        = fuse_nfs_create,
         .fsync        = fuse_nfs_fsync,
         .mkdir        = fuse_nfs_mkdir,
