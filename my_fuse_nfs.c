@@ -157,7 +157,7 @@ void *get_readdir_response(int sockfd, int *num_dir) {
 
 char *get_read_response(int sockfd, file_handler *fh, int *total_bytes) {
     char buffer[BUFFER_SIZE];
-    char *data_buffer;
+    char *data_buffer;//fix not allocate segment fault
     size_t n = recv(sockfd, buffer, BUFFER_SIZE, 0); //initial read
     if (n == 0) {
         //error: server terminated prematurely
@@ -351,7 +351,7 @@ int nfs_read(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char *
 
     free(data);
 
-    printf("data: %s\n", buf);
+    //printf("data: %s\n", buf);
 
     free(arg_buffer);
 
@@ -550,6 +550,8 @@ static int fuse_nfs_read(const char *path, char *buf, size_t size,
                          off_t offset, struct fuse_file_info *fi) {
     file_handler *nfsfh = (file_handler *) fi->fh;
     int ret = nfs_read(sockfd, nfsfh, offset, size, buf);
+
+    printf("buffer: %s\n", buf);
     return ret;
 }
 
