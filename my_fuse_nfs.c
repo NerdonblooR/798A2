@@ -13,9 +13,7 @@
 #include <time.h>
 #include <errno.h>
 
-
-#define SERV_PORT 3001
-
+#include "nfsClient.c"
 
 typedef struct nfs_context {
     char *server_ip;
@@ -25,23 +23,11 @@ typedef struct nfs_context {
 } nfs_context;
 
 
+int sockfd;
 
 static int nfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                        off_t offset, struct fuse_file_info *fi) {
-    struct nfsdir *nfsdir;
-    struct nfsdirent *nfsdirent;
-
-    int ret;
-    ret = nfs_opendir(nfs, path, &nfsdir);
-    if (ret < 0) {
-        return ret;
-    }
-
-    char *name_buffer;
-    while (nfs_readdir(nfsdir)) != NULL) {
-        filler(buf, nfsdirent->name, NULL, 0);
-    }
-    nfs_closedir(nfs, nfsdir);
+    strcpy(buf, "DUMMY DIR");
     return 0;
 }
 
@@ -50,7 +36,7 @@ static int nfs_open(const char *path, struct fuse_file_info *fi) {
     file_handler *nfsfh;
 
     fi->fh = 0;
-    ret = nfs_open(server_ip, path, &nfsfh);
+    ret =  nfs_open(sockfd, path, &nfsfh);
     if (ret < 0) {
         return ret;
     }
@@ -62,9 +48,9 @@ static int nfs_open(const char *path, struct fuse_file_info *fi) {
 
 static int nfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
     int ret = 0;
-    struct nfsfh *nfsfh;
+    file_handler *nfsfh;
 
-    ret = nfs_creat(nfs, path, mode, &nfsfh);
+    ret = nfs_create(sockfd, path, &fh);
     if (ret < 0) {
         return ret;
     }
@@ -76,56 +62,42 @@ static int nfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) 
 
 static int nfs_read(const char *path, char *buf, size_t size,
                     off_t offset, struct fuse_file_info *fi) {
-    file_handler *nfsfh = (struct nfsfh *) fi->fh;
+    file_handler *nfsfh = (file_handler *) fi->fh;
 
 
-    return nfs_read(server_ip, nfsfh, offset, size, buf);
+    return nfs_read(sockfd,  nfsfh,  offset,  size,  buf);
+
 }
 
 
 static int nfs_write(const char *path, const char *buf, size_t size,
                      off_t offset, struct fuse_file_info *fi) {
-    struct nfsfh *nfsfh = (struct nfsfh *) fi->fh;
+    file_handler *nfsfh = (file_handler *) fi->fh;
 
-    update_rpc_credentials();
 
-    return nfs_pwrite(nfs, nfsfh, offset, size, discard_const(buf));
+    return nfs_write(sockfd, nfsfh,  offset,  size, discard_const(buf));
+
 }
 
 
 static int nfs_mkdir(const char *path, mode_t mode) {
     int ret = 0;
-
-    ret = nfs_mkdir(nfs, path);
-    if (ret < 0) {
-        return ret;
-    }
-    ret = nfs_chmod(path);
-    if (ret < 0) {
-        return ret;
-    }
-
+    ret = nfs_mkdir(sockfd, path);
     return ret;
 }
 
 static int nfs_rmdir(const char *path) {
-    update_rpc_credentials();
 
-    return nfs_rmdir(nfs, path);
+    nfs_rmdir(sockfd, path);
 }
 
-static int nfs_rename(const char *from, const char *to) {
-
-    return nfs_rename(nfs, from, to);
-}
 
 static int nfs_fsync(const char *path, int isdatasync,
                      struct fuse_file_info *fi) {
-    struct nfsfh *nfsfh = (struct nfsfh *) fi->fh;
+    file_handler *nfsfh = (file_handler *) fi->fh;
 
-    update_rpc_credentials();
+    return nfs_fsync(sockfd, nfsfh);
 
-    return nfs_fsync(nfs, nfsfh);
 }
 
 
@@ -137,21 +109,20 @@ static struct fuse_operations nfs_oper = {
         .read        = fuse_nfs_read,
         .readdir    = fuse_nfs_readdir,
         .rmdir        = fuse_nfs_rmdir,
-        .rename        = fuse_nfs_rename,
         .write        = fuse_nfs_write,
 };
 
 int main(int argc, char *argv[]) {
-    //communicate with server to set u_id
-    u_id = 0;
 
-    if (argc < 2){
-    	perror("No server ip specified");
+    if (argc < 2) {
+        printf("No server ip specified\n");
         exit(1);
     }
 
+    struct sockaddr_in servaddr;
+
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        perror("Problem in creating the socket");
+        printf("Problem in creating the socket\n");
         exit(2);
     }
 
@@ -163,7 +134,7 @@ int main(int argc, char *argv[]) {
 
     //Connection of the client to the socket
     if (connect(sockfd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0) {
-        perror("Problem in connecting to the server");
+        printf("Problem in connecting to the server\n");
         exit(3);
     }
 
