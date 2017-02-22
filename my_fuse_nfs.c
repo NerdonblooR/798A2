@@ -54,15 +54,6 @@ void reserve_space(my_buffer *b, size_t bytes) {
     }
 }
 
-void serialize_size_t(size_t x, my_buffer *b) {
-    /* assume int == long; how can this be done better? */
-    x = htonll(x);
-    reserve_space(b, sizeof(x));
-    memcpy(b->data + b->next, &x, sizeof(x));
-    b->next += sizeof(x);
-}
-
-
 void serialize_int(int x, my_buffer *b) {
     x = htonl(x);
     reserve_space(b, sizeof(x));
@@ -542,7 +533,7 @@ static int fuse_nfs_write(const char *path, const char *buf, size_t size,
     file_handler *nfsfh = (file_handler *) fi->fh;
 
 
-    return nfs_write(sockfd, nfsfh, offset, size, discard_const(buf));
+    return nfs_write(sockfd, nfsfh, offset, size, buf);
 
 }
 
