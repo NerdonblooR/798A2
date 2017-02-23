@@ -547,6 +547,8 @@ static int fuse_nfs_getattr(const char *path, struct stat *stbuf,
     memset(stbuf, 0, sizeof(struct stat));
     nfs_getattr(sockfd, path, stbuf);
 
+    return 0;
+
 }
 
 
