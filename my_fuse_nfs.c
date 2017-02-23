@@ -549,10 +549,9 @@ static int fuse_nfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     num_dir = nfs_read_dir( sockfd, path, &dirs);
 
     for (i; i < num_dir; i++) {
-        filler(buf, dirs[i], NULL, 0);
+        filler(buf, dirs[i], NULL, 0, 0);
     }
 
-    strcpy(buf, "DUMMY DIR");
     return 0;
 }
 
