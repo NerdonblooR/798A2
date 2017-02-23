@@ -534,16 +534,7 @@ static int fuse_nfs_getattr(const char *path, struct stat *stbuf,
                             struct fuse_file_info *fi)
 {
     memset(stbuf, 0, sizeof(struct stat));
-    if (strcmp(path, "/") == 0) {
-        stbuf->st_mode = S_IFDIR | 0755;
-        stbuf->st_nlink = 2;
-        return 0;
-    }else{
-        stbuf->st_mode = S_IFREG | 0777;
-        stbuf->st_nlink = 1;
-        stbuf->st_size = 6190;
-        return 0;
-    }
+    nfs_getattr(sockfd, path, stbuf);
 
 }
 
@@ -558,6 +549,18 @@ static int fuse_nfs_access(const char *path, int mask)
 
 static int fuse_nfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                             off_t offset, struct fuse_file_info *fi) {
+
+    int num_dir = 0;
+    int i = 0;
+
+    char **dirs;
+
+    num_dir = nfs_read_dir( sockfd, path, &dirs);
+
+    for (i; i < num_dir; i++) {
+        filler(buf, dirs[i], NULL, 0);
+    }
+
     strcpy(buf, "DUMMY DIR");
     return 0;
 }
@@ -659,7 +662,7 @@ int main(int argc, char *argv[]) {
     //Creation of the socket:
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr("192.168.0.16");
+    servaddr.sin_addr.s_addr = inet_addr("192.168.0.107");
     servaddr.sin_port = htons(SERV_PORT); //convert to big-endian order
 
     //Connection of the client to the socket
