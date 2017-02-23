@@ -328,7 +328,7 @@ int nfs_open_internal(int sockfd, const char *path, file_handler **fh, const cha
 }
 
 int nfs_open(int sockfd, const char *path, file_handler **fh) {
-    int ret = nfs_open_internal(sockfd, path, fh, "LOOKUP") < 0
+    int ret = nfs_open_internal(sockfd, path, fh, "LOOKUP") < 0;
     if (ret < 0){
         return nfs_open_internal(sockfd, path, fh, "CREATE");
     }
