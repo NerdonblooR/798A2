@@ -242,19 +242,7 @@ int nfs_getattr(int sockfd, const char *path, struct stat *stbuf) {
     int response, type, file_size;
     size_t offset = 0;
     deserialize_int(&response, recvbuffer, &offset);
-    if (response < 0){
-        if (strcmp(path, "/") == 0) {
-            //path
-            stbuf->st_mode = S_IFDIR | 0777;
-            stbuf->st_nlink = 1;
-        } else {
-            //file
-            stbuf->st_mode = S_IFREG | 0777; //change this when copy to fuse
-            stbuf->st_size = BUFFER_SIZE;
-            stbuf->st_nlink = 1;
-        }
-        return 0;
-    }
+    if (response < 0) return -1;
 
 
     deserialize_int(&type, recvbuffer, &offset);
@@ -535,11 +523,7 @@ int nfs_read_dir(int sockfd, const char *path, char ***dirs) {
     return num_dir;
 }
 
-
-
 //===============================================
-
-
 
 static int fuse_nfs_getattr(const char *path, struct stat *stbuf,
                             struct fuse_file_info *fi)
