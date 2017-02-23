@@ -1,9 +1,12 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <dirent.h>
 
 
 #define SERV_PORT 9876
@@ -89,9 +92,10 @@ void deserialize_int(int *x, char *b, size_t *offset) {
 
 //deserialize str from next
 char *deserialize_str(char *b, size_t *offset) {
+    printf("buffer offset: %d\n", *offset);
     char *ret = malloc(strlen(b + *offset) + 1);//str will be null terminated
     strcpy(ret, b + *offset);
-    *offset += strlen(ret) + 1;
+    *offset += (strlen(ret) + 1);
     printf("ret size: %d\n", strlen(ret));
     return ret;
 }
@@ -105,10 +109,8 @@ void get_tcp_response(int sockfd, char *recvbuffer) {
         printf("The server terminated prematurely\n");
         exit(4);
     }
-
     printf("received %s\n", recvbuffer);
     printf("byte recevied %d\n", n);
-
 }
 
 
@@ -124,10 +126,12 @@ void *get_readdir_response(int sockfd, int *num_dir) {
     size_t offset = 0;
     deserialize_int(num_dir, buffer, &offset);
     int total_bytes;
+    int read_bytes;
     deserialize_int(&total_bytes, buffer, &offset);
     if (total_bytes > 0) {
-        data_buffer = malloc(total_bytes);
-        int read_bytes = n - offset;
+        data_buffer = realloc(data_buffer, total_bytes);
+        memset(data_buffer, 0, total_bytes);
+        read_bytes = n - offset;
         memcpy(data_buffer, buffer + offset, read_bytes);
         int rest_bytes = total_bytes - read_bytes;
         offset = read_bytes;
@@ -143,7 +147,9 @@ void *get_readdir_response(int sockfd, int *num_dir) {
             printf("read: %d\n", read_bytes);
             printf("rest: %d\n", rest_bytes);
         }
+        if (rest_bytes == 0) read_bytes = recv(sockfd, buffer, BUFFER_SIZE, 0); // read final newline
     }
+
     return data_buffer;
 }
 
@@ -182,29 +188,76 @@ char *get_read_response(int sockfd, file_handler *fh, int *total_bytes) {
             offset += read_bytes;
             rest_bytes -= read_bytes;
         }
+        if (rest_bytes == 0) read_bytes = recv(sockfd, buffer, BUFFER_SIZE, 0); // read final newline
     }
 
-    read_bytes = recv(sockfd, buffer, BUFFER_SIZE, 0); // read final newline
     return data_buffer;
 }
 
-//break large packet into several small one
 void handle_send(int sockfd, my_buffer *arg_buffer) {
+    //need to break large packet into several small one
     char sendbuffer[arg_buffer->next];
     memset(sendbuffer, 0, sizeof(sendbuffer));
     memcpy(sendbuffer, arg_buffer->data, arg_buffer->next);
     if (arg_buffer->size <= BUFFER_SIZE) {
         send(sockfd, sendbuffer, arg_buffer->next, 0);
     } else {
-
+        //not tested
+        size_t offset = 0;
+        size_t to_send = arg_buffer->next;
+        while (offset < to_send) {
+            offset = send(sockfd, sendbuffer + offset, to_send, 0);
+            to_send - offset;
+        }
     }
-
 }
 
 void print_buffer(my_buffer *arg_buffer) {
     printf("size: %d\n", arg_buffer->size);
     printf("next: %d\n", arg_buffer->next);
     printf("data: %s\n", arg_buffer->data + 1);
+}
+
+
+int nfs_getattr(int sockfd, const char *path, struct stat *stbuf) {
+    int cid = 1;
+    my_buffer *arg_buffer = new_buffer();
+    serialize_int(cid, arg_buffer);
+    print_buffer(arg_buffer);
+    serialize_str("GETATTR", arg_buffer);
+    serialize_str(path, arg_buffer);
+    serialize_char('\n', arg_buffer);
+
+    char recvbuffer[BUFFER_SIZE]; //need to receive a file handler
+    memset(recvbuffer, 0, sizeof(recvbuffer));
+
+    printf("HERE1\n");
+    handle_send(sockfd, arg_buffer);
+    printf("HERE2\n");
+    get_tcp_response(sockfd, recvbuffer);
+    printf("HERE3\n");
+
+
+    int type, file_size;
+    size_t offset = 0;
+    deserialize_int(&type, recvbuffer, &offset);
+    deserialize_int(&file_size, recvbuffer, &offset);
+
+    memset(stbuf, 0, sizeof(struct stat));
+    if (type == 0) {
+        //path
+        stbuf->st_mode = 0;
+        stbuf->st_size = file_size;
+        printf("dir size: %d\n", file_size);
+    } else {
+        //file
+        stbuf->st_mode = 1; //change this when copy to fuse
+        stbuf->st_size = file_size;
+        printf("file size: %d\n", file_size);
+    }
+
+    free(arg_buffer);
+    return 0;
 }
 
 
@@ -220,6 +273,7 @@ int nfs_open_internal(int sockfd, const char *path, file_handler **fh, const cha
     print_buffer(arg_buffer);
     serialize_char('\n', arg_buffer);
     print_buffer(arg_buffer);
+
     char recvbuffer[BUFFER_SIZE]; //need to receive a file handler
     memset(recvbuffer, 0, sizeof(recvbuffer));
 
@@ -285,13 +339,9 @@ int nfs_rmdir(int sockfd, const char *path) {
     printf("HERE1\n");
 
     handle_send(sockfd, arg_buffer);
-
     printf("HERE2\n");
-
     get_tcp_response(sockfd, recvbuffer);
-
     printf("HERE3\n");
-
 
     int response_code;
     size_t offset = 0;
@@ -303,6 +353,7 @@ int nfs_rmdir(int sockfd, const char *path) {
         printf("delete success\n");
 
     }
+
     free(arg_buffer);
     return 0;
 }
@@ -336,8 +387,6 @@ int nfs_read(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char *
     free(arg_buffer);
     return total_byte;
 }
-
-
 
 
 int nfs_write(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char *buf) {
@@ -380,6 +429,7 @@ int nfs_write(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char 
         printf("write success\n");
 
     }
+    free(arg_buffer);
     return 0;
 }
 
@@ -398,8 +448,6 @@ int nfs_fsync(int sockfd, file_handler *nfsfh) {
     print_buffer(arg_buffer);
 
     char recvbuffer[BUFFER_SIZE]; //need to receive a file handler
-
-
     printf("HERE1\n");
 
     handle_send(sockfd, arg_buffer);
@@ -425,6 +473,7 @@ int nfs_fsync(int sockfd, file_handler *nfsfh) {
 
     }
 
+    free(arg_buffer);
     return 0;
 }
 
@@ -437,29 +486,30 @@ int nfs_read_dir(int sockfd, const char *path, char ***dirs) {
     serialize_str(path, arg_buffer);
     serialize_char('\n', arg_buffer);
 
-    char recvbuffer[BUFFER_SIZE]; //need to receive a file handler
+
     printf("HERE1\n");
     handle_send(sockfd, arg_buffer);
     printf("HERE2\n");
-    get_tcp_response(sockfd, recvbuffer);
+    int num_dir;
+    char *all_dirs_data = get_readdir_response(sockfd, &num_dir);
     printf("HERE3\n");
 
-    int rcv_num_dir;
     size_t offset = 0;
-    deserialize_int(&rcv_num_dir, recvbuffer, &offset);
-
-    char **all_dirs = malloc(sizeof(*all_dirs) * rcv_num_dir);
-
+    char **all_dirs = malloc(sizeof(*all_dirs) * num_dir);
     int i;
-    for (i = 0; i < rcv_num_dir; ++i) {
+    for (i = 0; i < num_dir; ++i) {
         int path_len = 0;
-        all_dirs[i] = deserialize_str(recvbuffer, &offset);
+        all_dirs[i] = deserialize_str(all_dirs_data, &offset);
         printf("%s\n", all_dirs[i]);
     }
 
     *dirs = all_dirs;
+
+    printf("HERE4\n");
+    free(all_dirs_data);
     free(arg_buffer);
-    return 0;
+
+    return num_dir;
 }
 
 
@@ -492,34 +542,40 @@ int main(int argc, char *argv[]) {
     }
 
     file_handler *fh;
-    //nfs_create(sockfd, argv[2], &fh);
-    // nfs_mkdir(sockfd, argv[2]);
-    //nfs_rmdir(sockfd, argv[2]);
-    char buf [BUFFER_SIZE*2];
-    nfs_open(sockfd, argv[2], &fh);
-    //nfs_read(sockfd, fh, 0, BUFFER_SIZE, buf);
-    int i = 0;
-    size_t offset = 0;
-    for (i = 0; i < 10; i++) {
-        offset += nfs_read(sockfd, fh, offset, BUFFER_SIZE, buf);
-    }
 
+    struct stat stbuf;
 
+    char **dirs;
+    nfs_read_dir(sockfd, argv[2], &dirs);
+    //nfs_getattr(sockfd, argv[2], &stbuf);
+//    nfs_create(sockfd, argv[2], &fh);
+//    nfs_mkdir(sockfd, argv[2]);
+//    nfs_rmdir(sockfd, argv[2]);
+//    char buf[BUFFER_SIZE * 2];
+//    nfs_open(sockfd, argv[2], &fh);
+//    //nfs_read(sockfd, fh, 0, BUFFER_SIZE, buf);
+//    int i = 0;
+//    size_t offset = 0;
+//    for (i = 0; i < 10; i++) {
+//        offset += nfs_read(sockfd, fh, offset, BUFFER_SIZE, buf);
+//    }
+//
+//
 //    char *to_write = "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890";
 //
-//    int i=0;
+//    int i = 0;
 //    size_t offset = 0;
-//    for (i=0; i < 10000; i++){
+//    for (i = 0; i < 10000; i++) {
 //        printf(".");
 //        nfs_write(sockfd, fh, offset, strlen(to_write), to_write);
 //        offset += strlen(to_write);
 //    }
-
-    //nfs_write(sockfd, fh, 0, strlen(to_write), to_write);
-    //nfs_fsync(sockfd, fh);
-
-    //char **dirs;
-    //nfs_read_dir(sockfd, argv[2], &dirs);
+//
+//    nfs_write(sockfd, fh, 0, strlen(to_write), to_write);
+//    nfs_fsync(sockfd, fh);
+//
+//    char **dirs;
+//    nfs_read_dir(sockfd, argv[2], &dirs);
     return 0;
 }
 
