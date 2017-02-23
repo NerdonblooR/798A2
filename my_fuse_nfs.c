@@ -239,7 +239,8 @@ int nfs_getattr(int sockfd, const char *path, struct stat *stbuf) {
     get_tcp_response(sockfd, recvbuffer);
     printf("HERE3\n");
 
-    int response;
+    int response, type, file_size;
+    size_t offset = 0;
     deserialize_int(&response, recvbuffer, &offset);
     if (response < 0){
         if (strcmp(path, "/") == 0) {
@@ -255,8 +256,7 @@ int nfs_getattr(int sockfd, const char *path, struct stat *stbuf) {
         return 0;
     }
 
-    int type, file_size;
-    size_t offset = 0;
+
     deserialize_int(&type, recvbuffer, &offset);
     deserialize_int(&file_size, recvbuffer, &offset);
 
