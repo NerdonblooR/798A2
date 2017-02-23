@@ -239,6 +239,9 @@ int nfs_getattr(int sockfd, const char *path, struct stat *stbuf) {
     get_tcp_response(sockfd, recvbuffer);
     printf("HERE3\n");
 
+    int response;
+    deserialize_int(&response, recvbuffer, &offset);
+    if (response < 0) return 0;
 
     int type, file_size;
     size_t offset = 0;
@@ -248,12 +251,12 @@ int nfs_getattr(int sockfd, const char *path, struct stat *stbuf) {
     memset(stbuf, 0, sizeof(struct stat));
     if (type == 0) {
         //path
-        stbuf->st_mode = 0;
+        stbuf->st_mode = S_IFDIR | 0777;
         stbuf->st_size = file_size;
         printf("dir size: %d\n", file_size);
     } else {
         //file
-        stbuf->st_mode = 1; //change this when copy to fuse
+        stbuf->st_mode = S_IFREG | 0777; //change this when copy to fuse
         stbuf->st_size = file_size;
         printf("file size: %d\n", file_size);
     }
