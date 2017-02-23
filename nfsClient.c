@@ -7,19 +7,8 @@
 
 
 #define SERV_PORT 9876
-
 #define INITIAL_SIZE 100
 #define BUFFER_SIZE 4096
-
-#define CRT_DIR_FLAG   1
-#define CRT_FILE_FLAG  2
-#define OPEN_DIR_FLAG  3
-#define OPEN_FILE_FLAG 4
-#define READ_CALL_ID 5
-#define WRITE_CALL_ID 6
-#define FILE_SYNC_CALL_ID 7
-#define READ_DIR_CALL_ID 8
-#define RM_DIR_CALL_ID 9
 
 
 typedef struct file_handler {
@@ -74,7 +63,6 @@ void serialize_char(char x, my_buffer *b) {
     b->next += sizeof(x);
 }
 
-
 void serialize_str(const char *x, my_buffer *b) {
     reserve_space(b, strlen(x) + 1);
     strcpy(b->data + b->next, x);
@@ -112,7 +100,7 @@ char *deserialize_str(char *b, size_t *offset) {
 void get_tcp_response(int sockfd, char *recvbuffer) {
     char buffer[BUFFER_SIZE];
     size_t n = recv(sockfd, recvbuffer, BUFFER_SIZE, 0); //initial read
-    if (n == 0) {
+    if (n < 1) {
         //error: server terminated prematurely
         printf("The server terminated prematurely\n");
         exit(4);
@@ -126,14 +114,13 @@ void get_tcp_response(int sockfd, char *recvbuffer) {
 
 void *get_readdir_response(int sockfd, int *num_dir) {
     char buffer[BUFFER_SIZE];
-    char *data_buffer;
+    char *data_buffer = malloc(1);
     size_t n = recv(sockfd, buffer, BUFFER_SIZE, 0); //initial read
     if (n == 0) {
         //error: server terminated prematurely
         printf("The server terminated prematurely\n");
         exit(4);
     }
-    printf("WOW\n");
     size_t offset = 0;
     deserialize_int(num_dir, buffer, &offset);
     int total_bytes;
@@ -152,7 +139,7 @@ void *get_readdir_response(int sockfd, int *num_dir) {
             read_bytes = recv(sockfd, data_buffer + offset, rest_bytes, 0);
             offset += read_bytes;
             rest_bytes -= read_bytes;
-            printf("data_buffer: %s\n", data_buffer);
+            //printf("data_buffer: %s\n", data_buffer);
             printf("read: %d\n", read_bytes);
             printf("rest: %d\n", rest_bytes);
         }
@@ -161,10 +148,9 @@ void *get_readdir_response(int sockfd, int *num_dir) {
 }
 
 
-
-char *get_read_response(int sockfd, file_handler *fh) {
+char *get_read_response(int sockfd, file_handler *fh, int *total_bytes) {
     char buffer[BUFFER_SIZE];
-    char *data_buffer;
+    char *data_buffer = malloc(1);
     size_t n = recv(sockfd, buffer, BUFFER_SIZE, 0); //initial read
     if (n == 0) {
         //error: server terminated prematurely
@@ -176,32 +162,29 @@ char *get_read_response(int sockfd, file_handler *fh) {
     size_t offset = 0;
     deserialize_int(&response_code, buffer, &offset);
     printf("WOW5\n");
+    int read_bytes;
     fh->wc = deserialize_str(buffer, &offset);
     if (response_code == 0) {
         printf("WOW2\n");
-        int total_bytes;
-        deserialize_int(&total_bytes, buffer, &offset);
-        data_buffer = malloc(total_bytes);
-        int read_bytes = n - offset;
+        deserialize_int(total_bytes, buffer, &offset);
+        printf("taotal_bytes: %d\n", *total_bytes);
+        data_buffer = realloc(data_buffer, *total_bytes);
+        memset(data_buffer, 0, *total_bytes);
+        read_bytes = n - offset;
         memcpy(data_buffer, buffer + offset, read_bytes);
         printf("WOW3\n");
-        int rest_bytes = total_bytes - read_bytes;
+        int rest_bytes = *total_bytes - read_bytes;
         offset = read_bytes;
-        printf("read: %d\n", read_bytes);
-        printf("rest: %d\n", rest_bytes);
         while (rest_bytes > 0) {//buffer is full
-            printf("WOW4\n");
+            printf("keep reading\n");
             //deadlock when server failed
             read_bytes = recv(sockfd, data_buffer + offset, rest_bytes, 0);
             offset += read_bytes;
             rest_bytes -= read_bytes;
-            printf("data_buffer: %s\n", data_buffer);
-            printf("read: %d\n", read_bytes);
-            printf("rest: %d\n", rest_bytes);
         }
-
     }
 
+    read_bytes = recv(sockfd, buffer, BUFFER_SIZE, 0); // read final newline
     return data_buffer;
 }
 
@@ -237,10 +220,8 @@ int nfs_open_internal(int sockfd, const char *path, file_handler **fh, const cha
     print_buffer(arg_buffer);
     serialize_char('\n', arg_buffer);
     print_buffer(arg_buffer);
-
     char recvbuffer[BUFFER_SIZE]; //need to receive a file handler
     memset(recvbuffer, 0, sizeof(recvbuffer));
-
 
     printf("HERE1\n");
 
@@ -342,26 +323,21 @@ int nfs_read(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char *
     serialize_char('\n', arg_buffer);
     print_buffer(arg_buffer);
 
-
-    printf("HERE1\n");
-
     handle_send(sockfd, arg_buffer);
+    int total_byte;
+    char *data = get_read_response(sockfd, nfsfh, &total_byte);
+    printf("HERE3: %d\n", total_byte);
+    memcpy(buf, data, total_byte);
 
-    printf("HERE2\n");
+    //printf("data: %s\n", buf);
 
-    char *data = get_read_response(sockfd, nfsfh);
-
-    printf("HERE3\n");
-
-    strcpy(buf, data);
 
     free(data);
-
-    printf("data: %s\n", buf);
-
     free(arg_buffer);
-    return 0;
+    return total_byte;
 }
+
+
 
 
 int nfs_write(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char *buf) {
@@ -370,14 +346,12 @@ int nfs_write(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char 
     my_buffer *arg_buffer = new_buffer();
     serialize_int(cid, arg_buffer);
     serialize_str("WRITE", arg_buffer);
-    print_buffer(arg_buffer);
     serialize_int(nfsfh->file_id, arg_buffer);
     serialize_int(offset, arg_buffer);
     serialize_int(size, arg_buffer);
     serialize_str(nfsfh->wc, arg_buffer);
     serialize_data(buf, arg_buffer, size);
     serialize_char('\n', arg_buffer);
-    print_buffer(arg_buffer);
 
 
     char recvbuffer[BUFFER_SIZE]; //need to receive a file handler
@@ -455,9 +429,7 @@ int nfs_fsync(int sockfd, file_handler *nfsfh) {
 }
 
 
-
 int nfs_read_dir(int sockfd, const char *path, char ***dirs) {
-
     int cid = 4;
     my_buffer *arg_buffer = new_buffer();
     serialize_int(cid, arg_buffer);
@@ -519,28 +491,35 @@ int main(int argc, char *argv[]) {
         exit(3);
     }
 
-//    file_handler *fh;
-//    //nfs_create(sockfd, argv[2], &fh);
-//    nfs_open(sockfd, argv[2], &fh);
-//    // nfs_mkdir(sockfd, argv[2]);
-//    //nfs_rmdir(sockfd, argv[2]);
-//    //char *buf = malloc(10*BUFFER_SIZE);
-//    //nfs_read(sockfd, fh, 0, 3*BUFFER_SIZE, buf);
-//    char *to_write = "ABCDEFG";
+    file_handler *fh;
+    //nfs_create(sockfd, argv[2], &fh);
+    // nfs_mkdir(sockfd, argv[2]);
+    //nfs_rmdir(sockfd, argv[2]);
+    char buf [BUFFER_SIZE*2];
+    nfs_open(sockfd, argv[2], &fh);
+    //nfs_read(sockfd, fh, 0, BUFFER_SIZE, buf);
+    int i = 0;
+    size_t offset = 0;
+    for (i = 0; i < 10; i++) {
+        offset += nfs_read(sockfd, fh, offset, BUFFER_SIZE, buf);
+    }
+
+
+//    char *to_write = "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890";
 //
 //    int i=0;
 //    size_t offset = 0;
-//    for (i=0; i < 100; i++){
+//    for (i=0; i < 10000; i++){
 //        printf(".");
 //        nfs_write(sockfd, fh, offset, strlen(to_write), to_write);
 //        offset += strlen(to_write);
 //    }
-//    //nfs_write(sockfd, fh, 0, strlen(to_write), to_write);
-//    nfs_fsync(sockfd, fh);
 
-    char **dirs;
-    nfs_read_dir(sockfd, argv[2], &dirs);
+    //nfs_write(sockfd, fh, 0, strlen(to_write), to_write);
+    //nfs_fsync(sockfd, fh);
 
+    //char **dirs;
+    //nfs_read_dir(sockfd, argv[2], &dirs);
     return 0;
 }
 

@@ -1,0 +1,11 @@
+CC = gcc
+DEPS = primes.h
+OBJ = go.o primes.o
+IDIR =../include
+CFLAGS = -Wall
+
+%.o: %.c $(DEPS)
+        $(CC) $(CFLAGS) -c -o $@ $<
+
+go: $(OBJ)
+        gcc $(CFLAGS) -o $@ $^
