@@ -54,15 +54,6 @@ void reserve_space(my_buffer *b, size_t bytes) {
     }
 }
 
-void serialize_size_t(size_t x, my_buffer *b) {
-    /* assume int == long; how can this be done better? */
-    x = htonll(x);
-    reserve_space(b, sizeof(x));
-    memcpy(b->data + b->next, &x, sizeof(x));
-    b->next += sizeof(x);
-}
-
-
 void serialize_int(int x, my_buffer *b) {
     x = htonl(x);
     reserve_space(b, sizeof(x));
