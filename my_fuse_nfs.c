@@ -697,14 +697,10 @@ int main(int argc, char *argv[]) {
 
     nfc.is_up = 0;
     nfc.port_num = SERV_PORT;
-    nfc.server_ip = argv[2];
+    nfc.server_ip = "192.168.0.107";
 
     connect_to_server(&nfc);
 
-    char *fuse_argv[2];
-    fuse_argv[0] = argv[0];
-    fuse_argv[1] = argv[1];
-    fuse_argv[2] = argv[3];
 
     return fuse_main(argc, fuse_argv, &nfs_oper, NULL);
 }
