@@ -599,7 +599,7 @@ static int fuse_nfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
     char **dirs;
 
-    num_dir = nfs_read_dir( sockfd, path, &dirs);
+    num_dir = nfs_read_dir(&nfc, path, &dirs);
 
     for (i; i < num_dir; i++) {
         filler(buf, dirs[i], NULL, 0, 0);
@@ -613,7 +613,7 @@ static int fuse_nfs_open(const char *path, struct fuse_file_info *fi) {
     file_handler *nfsfh;
 
     fi->fh = 0;
-    ret = nfs_open(sockfd, path, &nfsfh);
+    ret = nfs_open(&nfc, path, &nfsfh);
     if (ret < 0) {
         return ret;
     }
@@ -627,7 +627,7 @@ static int fuse_nfs_create(const char *path, mode_t mode, struct fuse_file_info 
     int ret = 0;
     file_handler *nfsfh;
 
-    ret = nfs_create(sockfd, path, &nfsfh);
+    ret = nfs_create(&nfc, path, &nfsfh);
     if (ret < 0) {
         return ret;
     }
@@ -640,7 +640,7 @@ static int fuse_nfs_create(const char *path, mode_t mode, struct fuse_file_info 
 static int fuse_nfs_read(const char *path, char *buf, size_t size,
                          off_t offset, struct fuse_file_info *fi) {
     file_handler *nfsfh = (file_handler *) fi->fh;
-    int ret = nfs_read(sockfd, nfsfh, offset, size, buf);
+    int ret = nfs_read(&nfc, nfsfh, offset, size, buf);
 
     printf("buffer %d: %s\n", ret, buf);
     return ret;
@@ -650,20 +650,20 @@ static int fuse_nfs_read(const char *path, char *buf, size_t size,
 static int fuse_nfs_write(const char *path, const char *buf, size_t size,
                           off_t offset, struct fuse_file_info *fi) {
     file_handler *nfsfh = (file_handler *) fi->fh;
-    return nfs_write(sockfd, nfsfh, offset, size, buf);
+    return nfs_write(&nfc, nfsfh, offset, size, buf);
 
 }
 
 
 static int fuse_nfs_mkdir(const char *path, mode_t mode) {
     int ret = 0;
-    ret = nfs_mkdir(sockfd, path);
+    ret = nfs_mkdir(&nfc, path);
     return ret;
 }
 
 static int fuse_nfs_rmdir(const char *path) {
 
-    return nfs_rmdir(sockfd, path);
+    return nfs_rmdir(&nfc, path);
 }
 
 
@@ -671,7 +671,7 @@ static int fuse_nfs_fsync(const char *path, int isdatasync,
                           struct fuse_file_info *fi) {
     file_handler *nfsfh = (file_handler *) fi->fh;
 
-    return nfs_fsync(sockfd, nfsfh);
+    return nfs_fsync(&nfc, nfsfh);
 
 }
 
@@ -695,13 +695,6 @@ static struct fuse_operations nfs_oper = {
 };
 
 int main(int argc, char *argv[]) {
-    struct sockaddr_in servaddr;
-
-    int sockfd;
-    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        printf("Problem in creating the socket\n");
-        exit(2);
-    }
 
     nfc.is_up = 0;
     nfc.port_num = SERV_PORT;
