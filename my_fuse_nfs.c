@@ -702,5 +702,5 @@ int main(int argc, char *argv[]) {
     connect_to_server(&nfc);
 
 
-    return fuse_main(argc, fuse_argv, &nfs_oper, NULL);
+    return fuse_main(argc, argv, &nfs_oper, NULL);
 }
