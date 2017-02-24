@@ -111,7 +111,7 @@ void connect_to_server(nfs_context *nfc) {
         exit(2);
     }
 
-    printf("sockfd %d\n", nfc->sock_fd);
+    printf("&nfc %d\n", nfc->sock_fd);
     printf("portnum %d\n", nfc->port_num);
 
     //Creation of the socket
@@ -576,7 +576,7 @@ static int fuse_nfs_getattr(const char *path, struct stat *stbuf,
                             struct fuse_file_info *fi)
 {
     memset(stbuf, 0, sizeof(struct stat));
-    nfs_getattr(sockfd, path, stbuf);
+    nfs_getattr(&nfc, path, stbuf);
 
     return 0;
 
