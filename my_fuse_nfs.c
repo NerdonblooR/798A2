@@ -15,14 +15,15 @@
 #define INITIAL_SIZE 100
 #define BUFFER_SIZE 4096
 
-int sockfd;
-
 typedef struct nfs_context {
     char *server_ip;
     int port_num;
     int sock_fd;
     int is_up; //1 is up, 0 is down.
 } nfs_context;
+
+
+nfs_context nfc;
 
 
 typedef struct file_handler {
@@ -103,12 +104,43 @@ char *deserialize_str(char *b, size_t *offset) {
 }
 
 
-void get_tcp_response(int sockfd, char *recvbuffer) {
+void connect_to_server(nfs_context *nfc) {
+    struct sockaddr_in servaddr;
+    if ((nfc->sock_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        printf("Problem in creating the socket\n");
+        exit(2);
+    }
+
+    printf("sockfd %d\n", nfc->sock_fd);
+    printf("portnum %d\n", nfc->port_num);
+
+    //Creation of the socket
+    memset(&servaddr, 0, sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = inet_addr(nfc->server_ip);
+    servaddr.sin_port = htons(nfc->port_num); //convert to big-endian order
+
+    //Connection of the client to the socket
+    if (connect(nfc->sock_fd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0) {
+        printf("Problem in connecting to the server\n");
+        exit(3);
+    }
+
+    nfc->is_up = 1;
+}
+
+void get_tcp_response(nfs_context *nfc, char *recvbuffer) {
     char buffer[BUFFER_SIZE];
-    size_t n = recv(sockfd, recvbuffer, BUFFER_SIZE, 0); //initial read
+
+    if (!nfc->is_up) {
+        connect_to_server(nfc);
+    }
+
+    size_t n = recv(nfc->sock_fd, recvbuffer, BUFFER_SIZE, 0); //initial read
     if (n < 1) {
         //error: server terminated prematurely
         printf("The server terminated prematurely\n");
+        nfc->is_up = 0;
         exit(4);
     }
     printf("received %s\n", recvbuffer);
@@ -116,13 +148,19 @@ void get_tcp_response(int sockfd, char *recvbuffer) {
 }
 
 
-void *get_readdir_response(int sockfd, int *num_dir) {
+void *get_readdir_response(nfs_context *nfc, int *num_dir) {
+
+    if (!nfc->is_up) {
+        connect_to_server(nfc);
+    }
+
     char buffer[BUFFER_SIZE];
     char *data_buffer = malloc(1);
-    size_t n = recv(sockfd, buffer, BUFFER_SIZE, 0); //initial read
-    if (n == 0) {
+    size_t n = recv(nfc->sock_fd, buffer, BUFFER_SIZE, 0); //initial read
+    if (n < 1) {
         //error: server terminated prematurely
         printf("The server terminated prematurely\n");
+        nfc->is_up = 0;
         exit(4);
     }
     size_t offset = 0;
@@ -142,27 +180,33 @@ void *get_readdir_response(int sockfd, int *num_dir) {
         while (rest_bytes > 0) {//buffer is full
             printf("WOW4\n");
             //deadlock when server failed
-            read_bytes = recv(sockfd, data_buffer + offset, rest_bytes, 0);
+            read_bytes = recv(nfc->sock_fd, data_buffer + offset, rest_bytes, 0);
             offset += read_bytes;
             rest_bytes -= read_bytes;
             //printf("data_buffer: %s\n", data_buffer);
             printf("read: %d\n", read_bytes);
             printf("rest: %d\n", rest_bytes);
         }
-        if (rest_bytes == 0) read_bytes = recv(sockfd, buffer, BUFFER_SIZE, 0); // read final newline
+        if (rest_bytes == 0) read_bytes = recv(nfc->sock_fd, buffer, BUFFER_SIZE, 0); // read final newline
     }
 
     return data_buffer;
 }
 
 
-char *get_read_response(int sockfd, file_handler *fh, int *total_bytes) {
+char *get_read_response(nfs_context *nfc, file_handler *fh, int *total_bytes) {
+
+    if (!nfc->is_up) {
+        connect_to_server(nfc);
+    }
+
     char buffer[BUFFER_SIZE];
     char *data_buffer = malloc(1);
-    size_t n = recv(sockfd, buffer, BUFFER_SIZE, 0); //initial read
-    if (n == 0) {
+    size_t n = recv(nfc->sock_fd, buffer, BUFFER_SIZE, 0); //initial read
+    if (n < 1) {
         //error: server terminated prematurely
         printf("The server terminated prematurely\n");
+        nfc->is_up = 0;
         exit(4);
     }
     printf("WOW\n");
@@ -186,29 +230,32 @@ char *get_read_response(int sockfd, file_handler *fh, int *total_bytes) {
         while (rest_bytes > 0) {//buffer is full
             printf("keep reading\n");
             //deadlock when server failed
-            read_bytes = recv(sockfd, data_buffer + offset, rest_bytes, 0);
+            read_bytes = recv(nfc->sock_fd, data_buffer + offset, rest_bytes, 0);
             offset += read_bytes;
             rest_bytes -= read_bytes;
         }
-        if (rest_bytes == 0) read_bytes = recv(sockfd, buffer, BUFFER_SIZE, 0); // read final newline
+        if (rest_bytes == 0) read_bytes = recv(nfc->sock_fd, buffer, BUFFER_SIZE, 0); // read final newline
     }
 
     return data_buffer;
 }
 
-void handle_send(int sockfd, my_buffer *arg_buffer) {
+void handle_send(nfs_context *nfc, my_buffer *arg_buffer) {
+    if (!nfc->is_up) {
+        connect_to_server(nfc);
+    }
     //need to break large packet into several small one
     char sendbuffer[arg_buffer->next];
     memset(sendbuffer, 0, sizeof(sendbuffer));
     memcpy(sendbuffer, arg_buffer->data, arg_buffer->next);
     if (arg_buffer->size <= BUFFER_SIZE) {
-        send(sockfd, sendbuffer, arg_buffer->next, 0);
+        send(nfc->sock_fd, sendbuffer, arg_buffer->next, 0);
     } else {
         //not tested
         size_t offset = 0;
         size_t to_send = arg_buffer->next;
         while (offset < to_send) {
-            offset = send(sockfd, sendbuffer + offset, to_send, 0);
+            offset = send(nfc->sock_fd, sendbuffer + offset, to_send, 0);
             to_send - offset;
         }
     }
@@ -221,7 +268,7 @@ void print_buffer(my_buffer *arg_buffer) {
 }
 
 
-int nfs_getattr(int sockfd, const char *path, struct stat *stbuf) {
+int nfs_getattr(nfs_context *nfc, const char *path, struct stat *stbuf) {
     int cid = 1;
     my_buffer *arg_buffer = new_buffer();
     serialize_int(cid, arg_buffer);
@@ -234,9 +281,9 @@ int nfs_getattr(int sockfd, const char *path, struct stat *stbuf) {
     memset(recvbuffer, 0, sizeof(recvbuffer));
 
     printf("HERE1\n");
-    handle_send(sockfd, arg_buffer);
+    handle_send(nfc, arg_buffer);
     printf("HERE2\n");
-    get_tcp_response(sockfd, recvbuffer);
+    get_tcp_response(nfc, recvbuffer);
     printf("HERE3\n");
 
     int response, type, file_size;
@@ -268,7 +315,7 @@ int nfs_getattr(int sockfd, const char *path, struct stat *stbuf) {
 }
 
 
-int nfs_open_internal(int sockfd, const char *path, file_handler **fh, const char *command) {
+int nfs_open_internal(nfs_context *nfc, const char *path, file_handler **fh, const char *command) {
     //sed a path to server, get a file handler
     int cid = 0;
     my_buffer *arg_buffer = new_buffer();
@@ -286,11 +333,11 @@ int nfs_open_internal(int sockfd, const char *path, file_handler **fh, const cha
 
     printf("HERE1\n");
 
-    handle_send(sockfd, arg_buffer);
+    handle_send(nfc, arg_buffer);
 
     printf("HERE2\n");
 
-    get_tcp_response(sockfd, recvbuffer);
+    get_tcp_response(nfc, recvbuffer);
 
     printf("HERE3\n");
 
@@ -309,30 +356,26 @@ int nfs_open_internal(int sockfd, const char *path, file_handler **fh, const cha
     my_fh->wc = deserialize_str(recvbuffer, &offset);
     printf("wc: %s\n", my_fh->wc);
 
-
     *fh = my_fh;
     free(arg_buffer);
     return 0;
 }
 
-int nfs_open(int sockfd, const char *path, file_handler **fh) {
-    int ret = nfs_open_internal(sockfd, path, fh, "LOOKUP") < 0;
-    if (ret < 0){
-        return nfs_open_internal(sockfd, path, fh, "CREATE");
-    }
+int nfs_open(nfs_context *nfc, const char *path, file_handler **fh) {
+    return nfs_open_internal(nfc, path, fh, "LOOKUP");
 }
 
-int nfs_create(int sockfd, const char *path, file_handler **fh) {
-    return nfs_open_internal(sockfd, path, fh, "CREATE");
+int nfs_create(nfs_context *nfc, const char *path, file_handler **fh) {
+    return nfs_open_internal(nfc, path, fh, "CREATE");
 }
 
-int nfs_mkdir(int sockfd, const char *path) {
+int nfs_mkdir(nfs_context *nfc, const char *path) {
     file_handler **fh;
-    return nfs_open_internal(sockfd, path, fh, "MKDIR");
+    return nfs_open_internal(nfc, path, fh, "MKDIR");
 }
 
 
-int nfs_rmdir(int sockfd, const char *path) {
+int nfs_rmdir(nfs_context *nfc, const char *path) {
     int cid = 1;
     my_buffer *arg_buffer = new_buffer();
     serialize_int(cid, arg_buffer);
@@ -347,10 +390,9 @@ int nfs_rmdir(int sockfd, const char *path) {
     char recvbuffer[BUFFER_SIZE]; //need to receive a file handler
 
     printf("HERE1\n");
-
-    handle_send(sockfd, arg_buffer);
+    handle_send(nfc, arg_buffer);
     printf("HERE2\n");
-    get_tcp_response(sockfd, recvbuffer);
+    get_tcp_response(nfc, recvbuffer);
     printf("HERE3\n");
 
     int response_code;
@@ -369,7 +411,7 @@ int nfs_rmdir(int sockfd, const char *path) {
 }
 
 
-int nfs_read(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char *buf) {
+int nfs_read(nfs_context *nfc, file_handler *nfsfh, size_t offset, size_t size, char *buf) {
     int cid = 2;
     printf("===========start read=========\n");
     my_buffer *arg_buffer = new_buffer();
@@ -384,9 +426,14 @@ int nfs_read(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char *
     serialize_char('\n', arg_buffer);
     print_buffer(arg_buffer);
 
-    handle_send(sockfd, arg_buffer);
+    printf("HERE1\n");
+
+    handle_send(nfc, arg_buffer);
     int total_byte;
-    char *data = get_read_response(sockfd, nfsfh, &total_byte);
+
+    printf("HERE2\n");
+
+    char *data = get_read_response(nfc, nfsfh, &total_byte);
     printf("HERE3: %d\n", total_byte);
     memcpy(buf, data, total_byte);
 
@@ -399,7 +446,7 @@ int nfs_read(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char *
 }
 
 
-int nfs_write(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char *buf) {
+int nfs_write(nfs_context *nfc, file_handler *nfsfh, size_t offset, size_t size, char *buf) {
     int cid = 2;
     printf("===========start write=========\n");
     my_buffer *arg_buffer = new_buffer();
@@ -417,11 +464,11 @@ int nfs_write(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char 
 
     printf("HERE1\n");
 
-    handle_send(sockfd, arg_buffer);
+    handle_send(nfc, arg_buffer);
 
     printf("HERE2\n");
 
-    get_tcp_response(sockfd, recvbuffer);
+    get_tcp_response(nfc, recvbuffer);
 
     printf("HERE3\n");
 
@@ -444,7 +491,7 @@ int nfs_write(int sockfd, file_handler *nfsfh, size_t offset, size_t size, char 
     return size;
 }
 
-int nfs_fsync(int sockfd, file_handler *nfsfh) {
+int nfs_fsync(nfs_context *nfc, file_handler *nfsfh) {
 
     int cid = 2;
     printf("===========start fsync=========\n");
@@ -461,11 +508,11 @@ int nfs_fsync(int sockfd, file_handler *nfsfh) {
     char recvbuffer[BUFFER_SIZE]; //need to receive a file handler
     printf("HERE1\n");
 
-    handle_send(sockfd, arg_buffer);
+    handle_send(nfc, arg_buffer);
 
     printf("HERE2\n");
 
-    get_tcp_response(sockfd, recvbuffer);
+    get_tcp_response(nfc, recvbuffer);
 
     printf("HERE3\n");
 
@@ -489,7 +536,7 @@ int nfs_fsync(int sockfd, file_handler *nfsfh) {
 }
 
 
-int nfs_read_dir(int sockfd, const char *path, char ***dirs) {
+int nfs_read_dir(nfs_context *nfc, const char *path, char ***dirs) {
     int cid = 4;
     my_buffer *arg_buffer = new_buffer();
     serialize_int(cid, arg_buffer);
@@ -499,10 +546,10 @@ int nfs_read_dir(int sockfd, const char *path, char ***dirs) {
 
 
     printf("HERE1\n");
-    handle_send(sockfd, arg_buffer);
+    handle_send(nfc, arg_buffer);
     printf("HERE2\n");
     int num_dir;
-    char *all_dirs_data = get_readdir_response(sockfd, &num_dir);
+    char *all_dirs_data = get_readdir_response(nfc, &num_dir);
     printf("HERE3\n");
 
     size_t offset = 0;
@@ -650,21 +697,22 @@ static struct fuse_operations nfs_oper = {
 int main(int argc, char *argv[]) {
     struct sockaddr_in servaddr;
 
+    int sockfd;
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         printf("Problem in creating the socket\n");
         exit(2);
     }
 
-    //Creation of the socket:
-    memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr("192.168.0.107");
-    servaddr.sin_port = htons(SERV_PORT); //convert to big-endian order
+    nfc.is_up = 0;
+    nfc.port_num = SERV_PORT;
+    nfc.server_ip = argv[1];
 
-    //Connection of the client to the socket
-    if (connect(sockfd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0) {
-        printf("Problem in connecting to the server\n");
-        exit(3);
-    }
-    return fuse_main(argc, argv, &nfs_oper, NULL);
+    connect_to_server(&nfc);
+
+    char *fuse_argv[2];
+
+    fuse_arg[0] = argv[0];
+    fuse_arg[1] = argv[2];
+
+    return fuse_main(argc, fuse_arg, &nfs_oper, NULL);
 }
