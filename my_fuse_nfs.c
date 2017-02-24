@@ -22,7 +22,6 @@ typedef struct nfs_context {
     int is_up; //1 is up, 0 is down.
 } nfs_context;
 
-
 nfs_context nfc;
 
 
@@ -705,6 +704,7 @@ int main(int argc, char *argv[]) {
     char *fuse_argv[2];
     fuse_argv[0] = argv[0];
     fuse_argv[1] = argv[2];
+    fuse_argv[2] = argv[3];
 
     return fuse_main(argc, fuse_argv, &nfs_oper, NULL);
 }
