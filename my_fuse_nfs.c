@@ -703,9 +703,8 @@ int main(int argc, char *argv[]) {
     connect_to_server(&nfc);
 
     char *fuse_argv[2];
+    fuse_argv[0] = argv[0];
+    fuse_argv[1] = argv[2];
 
-    fuse_arg[0] = argv[0];
-    fuse_arg[1] = argv[2];
-
-    return fuse_main(argc, fuse_arg, &nfs_oper, NULL);
+    return fuse_main(argc, fuse_argv, &nfs_oper, NULL);
 }
